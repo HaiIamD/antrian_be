@@ -90,55 +90,38 @@ const getAllLocketData = async (req, res) => {
 
 const getWeekLocketData = async (req, res) => {
   try {
-    const now = moment().tz('Asia/Jakarta'); // Waktu saat ini di Jakarta
+    const now = moment().tz('Asia/Jakarta');
     const hariIndonesia = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
 
-    let endDate = now.clone(); // Inisialisasi endDate dengan waktu sekarang
-
-    // Sesuaikan endDate agar menjadi hari kerja terakhir yang ingin ditampilkan
-    // Jika hari ini Rabu, 11 Juni (seperti contoh), maka endDate harusnya Selasa, 10 Juni
-    // Jika hari ini Senin, 9 Juni, maka endDate harusnya Jumat, 6 Juni
-    // Kita ingin 5 hari kerja yang berakhir H-1 dari hari ini.
+    let endDate = now.clone();
 
     let daysToSubtract = 0;
-    const currentDayOfWeek = now.day(); // 0 = Minggu, 1 = Senin, ..., 6 = Sabtu
+    const currentDayOfWeek = now.day();
 
     if (currentDayOfWeek === 0) {
-      // Jika hari ini Minggu (misal 8 Juni)
-      // Kita ingin berakhir di Jumat, 6 Juni. Jadi mundur 2 hari.
       daysToSubtract = 2;
     } else if (currentDayOfWeek === 1) {
-      // Jika hari ini Senin (misal 9 Juni)
-      // Kita ingin berakhir di Jumat, 6 Juni. Jadi mundur 3 hari.
       daysToSubtract = 3;
     } else if (currentDayOfWeek === 6) {
-      // Jika hari ini Sabtu (misal 7 Juni)
-      // Kita ingin berakhir di Jumat, 6 Juni. Jadi mundur 1 hari.
       daysToSubtract = 1;
     } else {
-      // Hari kerja lainnya (Selasa-Jumat)
-      // Ingin berakhir H-1
       daysToSubtract = 1;
     }
 
-    endDate.subtract(daysToSubtract, 'days').endOf('day'); // Set endDate ke akhir hari yang dituju
+    endDate.subtract(daysToSubtract, 'days').endOf('day');
 
-    // Sekarang, hitung 4 hari kerja mundur dari endDate untuk mendapatkan startDate
     const datesToFetch = [];
     let tempDate = endDate.clone();
 
-    // Loop mundur untuk mendapatkan 5 hari kerja
     while (datesToFetch.length < 5) {
       const dayOfWeek = tempDate.day();
 
       if (dayOfWeek >= 1 && dayOfWeek <= 5) {
-        // Hanya tambahkan hari kerja (Senin-Jumat)
-        datesToFetch.unshift(tempDate.format('YYYY-MM-DD')); // Tambahkan di awal agar urutan mundur
+        datesToFetch.unshift(tempDate.format('YYYY-MM-DD'));
       }
-      tempDate.subtract(1, 'day'); // Pindah ke hari sebelumnya
+      tempDate.subtract(1, 'day');
     }
 
-    // Pastikan rentang query database mencakup semua datesToFetch
     const queryStartDate = moment(datesToFetch[0]).tz('Asia/Jakarta').startOf('day').toDate();
     const queryEndDate = moment(datesToFetch[datesToFetch.length - 1])
       .tz('Asia/Jakarta')
@@ -153,7 +136,7 @@ const getWeekLocketData = async (req, res) => {
     }).select('locket totalQueue day');
 
     if (!findLocketData || findLocketData.length === 0) {
-      return res.status(404).json({ error: 'Tidak ada data locket yang ditemukan untuk 5 hari kerja terakhir.' });
+      return res.status(404).json({ error: 'Tidak ada data locket yang ditemukan untuk 7 hari kerja terakhir.' });
     }
 
     // Buat objek untuk menyimpan totalQueue per hari dan locket

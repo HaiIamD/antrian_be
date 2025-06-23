@@ -238,7 +238,7 @@ io.on('connection', (socket) => {
 
         await queue.save();
 
-        await triggerPrint(loketNum, newQueueNumber);
+        // await triggerPrint(loketNum, newQueueNumber);
 
         // Kirim nomor antrean yang baru diambil kembali ke klien yang meminta
         socket.emit('queueNumberAssigned', {
@@ -277,7 +277,7 @@ const connectDb = require('./ConnectDb');
 const path = require('path');
 const fs = require('fs');
 
-app.use(express.json({ limit: '50mb' })); // Misalnya, 50MB. Sesuaikan dengan kebutuhanmu.
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(helmet());
 app.use(helmet.crossOriginResourcePolicy({ policy: 'cross-origin' }));
