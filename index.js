@@ -11,141 +11,106 @@ const VideoData = require('./Schema/Video');
 const QueueData = require('./Schema/Queue');
 const app = express();
 const server = http.createServer(app);
-const ThermalPrinter = require('node-thermal-printer').printer;
-const PrinterTypes = require('node-thermal-printer').types;
-const { Adapter, UsbAdapter, TcpAdapter, SerialPortAdapter } = require('node-thermal-printer'); // Import Adapter classes
 
-// Printer Configuration
-let printer;
-try {
-  // GANTI BAGIAN INI SESUAI DENGAN KONEKSI PRINTER ANDA
-  // Pastikan Anda memilih salah satu opsi di bawah ini dan mengkomentari yang lain.
+const { ThermalPrinter, PrinterTypes } = require('node-thermal-printer');
+const puppeteer = require('puppeteer');
+const { print } = require('pdf-to-printer');
 
-  // Opsi A: Printer USB (paling umum untuk printer thermal langsung ke server)
-  // Perlu package escpos-usb jika belum terinstal (npm install escpos-usb)
-  // Atau pastikan driver USB sudah terinstal di OS Anda
-  // Anda mungkin perlu mengetahui VID dan PID printer Anda
-  // const Usb = require('escpos-usb');
-  // const device = new Usb(); // Atau new Usb(0x04b8, 0x0202); // Ganti VID, PID printer Anda
-  // printer = new ThermalPrinter({
-  //   type: PrinterTypes.EPSON, // Ganti dengan tipe printer Anda (EPSON, STAR, GENERIC)
-  //   interface: new UsbAdapter(device), // Gunakan UsbAdapter
-  // });
-
-  // Opsi B: Printer Jaringan (LAN/Ethernet)
-  // printer = new ThermalPrinter({
-  //   type: PrinterTypes.EPSON, // Ganti dengan tipe printer Anda (EPSON, STAR, GENERIC)
-  //   interface: new TcpAdapter('192.168.1.100', 9100), // GANTI DENGAN IP PRINTER DAN PORT YANG BENAR
-  //   // Contoh port default: 9100, 9000
-  //   options: {
-  //     timeout: 1000, // Timeout dalam ms
-  //   }
-  // });
-
-  // Opsi C: Printer Serial Port (COM Port di Windows, /dev/ttyS0 di Linux)
-  // Perlu package serialport jika belum terinstal (npm install serialport)
-  // const SerialPort = require('serialport');
-  // const port = new SerialPort('/dev/ttyUSB0', { // GANTI DENGAN PORT SERIAL ANDA
-  //   baudRate: 9600, // GANTI DENGAN BAUD RATE PRINTER ANDA
-  // });
-  // printer = new ThermalPrinter({
-  //   type: PrinterTypes.EPSON, // Ganti dengan tipe printer Anda
-  //   interface: new SerialPortAdapter(port),
-  // });
-
-  // --- PENTING: Coba hubungkan ke printer saat aplikasi dimulai ---
-  printer
-    .isConnected()
-    .then(() => {
-      console.log('Printer thermal terhubung dan siap!');
-    })
-    .catch((err) => {
-      console.error('Gagal terhubung ke printer thermal:', err.message);
-      console.error('Pastikan printer ON, terhubung dengan benar, dan konfigurasi IP/Port/USB/Serial sudah sesuai.');
-    });
-} catch (e) {
-  console.error('Error inisialisasi printer thermal:', e.message);
-  console.error('Pastikan library printer sudah terinstal dan parameter koneksi benar.');
-}
-
-// Fungsi untuk memicu cetak
 const triggerPrint = async (loketId, nomorAntrian) => {
-  if (!printer) {
-    console.error('Printer belum terinisialisasi atau gagal terhubung.');
-    return;
-  }
+  const htmlContent = `
+    <html>
+      <head>
+        <style>
+          /* Pastikan tidak ada margin di html dan body */
+          html, body,head {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            width: 80mm;
+            text-align: center;
+          }
+          .header { font-weight: bold; font-size: 14px; }
+          .sub-header { font-size: 14px; margin-bottom: 20px; }
+          .label { font-size: 16px; margin-bottom: 5px;}
+          .nomor-antrian { 
+            font-size: 80px;
+            font-weight: bold; 
+            line-height: 1;
+            margin-bottom: 20px;
+          }
+          .container {
+            padding: 10px; /* Menambahkan sedikit padding agar konten tidak menempel di garis */
+        }
+          .locket { font-size: 16px; margin-bottom: 20px;}
+          .footer { font-size: 12px; }
+          .tanggal { font-size: 12px; margin-top: 15px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">LAYANAN ANTRIAN KEMENTERIAN</div>
+          <div class="sub-header">HUKUM KEPULAUAN RIAU</div>
+          
+          <div class="label">Antrian No :</div>
+          <div class="nomor-antrian">${nomorAntrian}</div>
+          
+          <div class="locket">Locket : ${loketId}</div>
+          
+          <div class="footer">Mohon menunggu panggilan Anda. Terima kasih.</div>
+          
+          <div class="tanggal">${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+        </div>
+      </body>
+    </html>
+  `;
+
+  const pdfPath = path.join(__dirname, 'temp_struk.pdf');
 
   try {
-    // Reset printer untuk memastikan bersih
-    printer.alignCenter(); // Tengahkan semua teks secara default
-    printer.setTextSize(0, 0); // Ukuran teks normal
-    printer.setBold(false); // Tidak tebal
-    printer.newLine(); // Baris kosong untuk spasi atas
+    console.log('Membuat PDF...');
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
+    const page = await browser.newPage();
 
-    // Logo (Simulasi - ini akan dicetak sebagai baris kosong atau tidak sama jika tidak ada gambar bitmap)
-    // Jika Anda ingin mencetak logo, Anda harus mengkonversi gambar ke format bitmap (monochrome)
-    // dan menggunakan printer.printImage(bitmapData);
-    // Untuk saat ini, kita bisa mencetak beberapa baris kosong sebagai placeholder logo.
-    printer.newLine();
-    printer.newLine();
-    printer.newLine(); // Placeholder untuk tinggi logo
+    await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
 
-    // Header Aplikasi
-    printer.setBold(true); // Tebal
-    printer.setTextSize(0, 0); // Ukuran normal
-    printer.print('LAYANAN ANTRIAN KEMENTERIAN');
-    printer.newLine();
-    printer.print('HUKUM KEPULAUAN RIAU');
-    printer.setBold(false); // Kembali normal
+    // =================================================================
+    // KUNCI UTAMA PERBAIKAN ADA DI SINI
+    // =================================================================
+    // 1. Ukur tinggi konten secara dinamis dari dalam browser
+    const contentHeight = await page.evaluate(() => {
+      // Menggunakan scrollHeight untuk mendapatkan tinggi total dari konten
+      return document.body.scrollHeight;
+    });
 
-    printer.newLine();
-    printer.newLine();
+    console.log(`Tinggi konten terukur: ${contentHeight}px`);
+    // =================================================================
 
-    // Antrian No:
-    printer.setTextSize(0, 0); // Normal
-    printer.print('Antrian No :');
-    printer.newLine();
+    // 2. Membuat PDF dengan tinggi yang presisi sesuai hasil pengukuran
+    await page.pdf({
+      path: pdfPath,
+      width: '80mm',
+      height: `280px`, // Gunakan tinggi dinamis yang sudah diukur
+      printBackground: true,
+      margin: { top: 0, bottom: 0, left: 0, right: 0 },
+    });
 
-    // Nomor Antrean Utama
-    printer.setTextSize(4, 4); // Sangat besar (sesuai gambar)
-    printer.setBold(true); // Lebih tebal untuk nomor antrean
-    printer.print(`${nomorAntrian}`); // Hanya nomornya saja
-    printer.setBold(false); // Kembali normal
-    printer.setTextSize(0, 0); // Kembali normal
+    await browser.close();
+    console.log(`PDF berhasil dibuat dengan tinggi presisi: ${pdfPath}`);
 
-    printer.newLine();
-    printer.newLine();
+    const options = {
+      printer: 'POS-80',
+    };
 
-    // Locket :
-    printer.print(`Locket : ${loketId}`);
-    printer.newLine();
-    printer.newLine();
-    printer.newLine(); // Spasi lebih untuk pesan
-
-    // Pesan
-    printer.print('Mohon menunggu panggilan Anda. Terima kasih.');
-    printer.newLine();
-
-    // Tanggal dan Waktu (sesuai format gambar)
-    // Membuat format tanggal "Kamis, 22 Maret 2025"
-    const date = new Date();
-    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-    const formattedDate = date.toLocaleDateString('id-ID', options);
-    printer.print(formattedDate);
-    printer.newLine();
-    printer.newLine();
-
-    printer.cut(); // Potong kertas
-
-    // Untuk DummyAdapter, execute() akan menghasilkan output ke konsol.
-    await printer.execute(); // Eksekusi perintah cetak
-    console.log(`Berhasil mencetak nomor: ${nomorAntrian} untuk Loket: ${loketId} (Simulasi Cetak Selesai).`);
-    console.log('\n--- Tampilan Cetak di Konsol (Simulasi) ---');
-    const printedContent = printer.getText(); // Ambil konten yang dicetak
-    console.log(printedContent);
-    console.log('-------------------------------------------\n');
+    console.log(`Mengirim ke printer: ${options.printer}...`);
+    await print(pdfPath, options);
+    console.log('✅ Berhasil mengirim tugas cetak ke printer.');
   } catch (error) {
-    console.error('Error saat mencetak ke printer:', error);
+    console.error('❌ Error saat proses cetak:', error);
+  } finally {
+    if (fs.existsSync(pdfPath)) {
+      fs.unlinkSync(pdfPath);
+      console.log('File PDF sementara dihapus.');
+    }
   }
 };
 
@@ -274,6 +239,7 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3002;
 const connectDb = require('./ConnectDb');
+const Backupdatabase = require('./Backupdb.js');
 const path = require('path');
 const fs = require('fs');
 
@@ -407,6 +373,7 @@ app.use('*', (req, res) => {
   res.status(500).json('Undifined Url , Try Again');
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
+  // 1. Tambahkan async di sini
   console.log(`You are Running in PORT ${PORT}`);
 });

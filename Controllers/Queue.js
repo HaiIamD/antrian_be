@@ -1,6 +1,7 @@
 const LocketData = require('../Schema/Queue');
 const HistoryData = require('../Schema/queueHistory');
 const moment = require('moment-timezone');
+const cron = require('node-cron');
 
 const getLocketData = async (req, res) => {
   try {
@@ -200,12 +201,13 @@ const getWeekLocketData = async (req, res) => {
 
 const getFilterLocketData = async (req, res) => {
   try {
-    const daysFilter = parseInt(req.query.days) || 7;
+    const { startDate: startDateQuery, endDate: endDateQuery } = req.query;
 
-    const now = new Date();
-    const startDate = new Date(now);
-    startDate.setUTCDate(now.getUTCDate() - daysFilter);
-    startDate.setUTCHours(0, 0, 0, 0);
+    let startDate, endDate;
+    startDate = new Date(startDateQuery);
+    endDate = new Date(endDateQuery);
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
 
     const locketColors = {
       'Locket 1': '#0d0d84',
@@ -219,7 +221,7 @@ const getFilterLocketData = async (req, res) => {
         $match: {
           day: {
             $gte: startDate,
-            $lte: now,
+            $lte: endDate,
           },
         },
       },
@@ -249,12 +251,19 @@ const getFilterLocketData = async (req, res) => {
       dataValues.push(item.totalQueue);
       backgroundColors.push(locketColors[locketLabel] || '#cccccc');
     });
-
+    const formatDate = (date) => {
+      return date.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+    };
+    const dynamicLabel = `Kunjungan ${formatDate(startDate)} - ${formatDate(endDate)}`;
     const formattedData = {
       labels: labels,
       datasets: [
         {
-          label: `Kunjungan ${daysFilter} Hari`,
+          label: dynamicLabel,
           data: dataValues,
           backgroundColor: backgroundColors,
           borderColor: '#ffffff',
@@ -270,4 +279,50 @@ const getFilterLocketData = async (req, res) => {
   }
 };
 
+const archiveAndResetAllLocketData = async () => {
+  console.log('----------------------------------------------------');
+  console.log(`[${new Date().toLocaleString('id-ID')}] Menjalankan tugas penjadwalan: Mengarsipkan dan mereset data loket...`);
+
+  try {
+    const allLocketData = await LocketData.find({});
+
+    if (allLocketData.length === 0) {
+      console.log('[INFO] Tidak ada data loket yang ditemukan untuk diarsipkan.');
+      return;
+    }
+    const today = moment().tz('Asia/Jakarta').toDate();
+    for (const locketDoc of allLocketData) {
+      const historyEntry = new HistoryData({
+        locket: locketDoc.locket,
+        day: today,
+        totalQueue: locketDoc.totalQueue,
+        currentQueue: locketDoc.currentQueue,
+        nextQueue: locketDoc.nextQueue,
+        lastTakenNumber: locketDoc.lastTakenNumber,
+      });
+
+      await historyEntry.save();
+      console.log(`[SUKSES] Data untuk loket '${locketDoc.locket}' berhasil diarsipkan.`);
+
+      locketDoc.totalQueue = 0;
+      locketDoc.currentQueue = 0;
+      locketDoc.nextQueue = 1;
+      locketDoc.lastTakenNumber = 0;
+
+      // 6. Simpan perubahan pada dokumen LocketData
+      await locketDoc.save();
+      console.log(`[SUKSES] Data untuk loket '${locketDoc.locket}' berhasil direset.`);
+    }
+
+    console.log(`[SELESAI] Tugas penjadwalan berhasil dijalankan untuk ${allLocketData.length} loket.`);
+  } catch (error) {
+    console.error(`[ERROR] Terjadi kesalahan saat menjalankan tugas terjadwal:`, error);
+  }
+  console.log('----------------------------------------------------');
+};
+
+cron.schedule('0 17 * * *', archiveAndResetAllLocketData, {
+  scheduled: true,
+  timezone: 'Asia/Jakarta',
+});
 module.exports = { getLocketData, saveLocketData, getAllLocketData, getWeekLocketData, getFilterLocketData };
