@@ -17,48 +17,73 @@ const puppeteer = require('puppeteer');
 const { print } = require('pdf-to-printer');
 
 const triggerPrint = async (loketId, nomorAntrian) => {
+  let logoDataUri = '';
+  try {
+    const imagePath = path.join(__dirname, 'public', 'logo.png'); // Ganti 'logo.png' dengan nama file Anda
+    const imageBuffer = fs.readFileSync(imagePath);
+    const imageBase64 = imageBuffer.toString('base64');
+    // Tentukan tipe MIME yang benar (image/png, image/jpeg, dll.)
+    logoDataUri = `data:image/png;base64,${imageBase64}`;
+  } catch (error) {
+    console.error('Gagal memuat gambar logo:', error.message);
+    // Jika logo gagal dimuat, proses cetak tetap berjalan tanpa logo
+  }
   const htmlContent = `
     <html>
       <head>
         <style>
           /* Pastikan tidak ada margin di html dan body */
           html, body,head {
-            margin: 0;
+            margin: 0px;
             padding: 0;
             font-family: Arial, sans-serif;
             width: 80mm;
             text-align: center;
           }
-          .header { font-weight: bold; font-size: 14px; }
-          .sub-header { font-size: 14px; margin-bottom: 20px; }
-          .label { font-size: 16px; margin-bottom: 5px;}
+          .logo { height: 3rem;margin-bottom:5px; }
+          body {
+            display: flex;
+            justify-content: center; /* Center Horizontal */
+            align-items: center;     /* Center Vertikal */
+          }
+          .header { font-weight: bold; font-size: 13px; }
+          .header .white {
+             color: white;}
+          .sub-header { font-weight: bold; font-size: 13px; margin-bottom: 5px; }
+          .label { font-size: 13px; margin-bottom: 2px;}
           .nomor-antrian { 
-            font-size: 80px;
+            font-size: 90px;
             font-weight: bold; 
             line-height: 1;
-            margin-bottom: 20px;
+            margin-button: 10px;
+
           }
-          .container {
-            padding: 10px; /* Menambahkan sedikit padding agar konten tidak menempel di garis */
-        }
-          .locket { font-size: 16px; margin-bottom: 20px;}
+          .locket { font-size: 13px; margin-bottom: 5px;}
           .footer { font-size: 12px; }
-          .tanggal { font-size: 12px; margin-top: 15px; }
+          .tanggal { font-size: 12px; margin-top: 5px; }
         </style>
       </head>
       <body>
         <div class="container">
-          <div class="header">LAYANAN ANTRIAN KEMENTERIAN</div>
-          <div class="sub-header">HUKUM KEPULAUAN RIAU</div>
+        ${logoDataUri ? `<img src="${logoDataUri}" alt="Logo" class="logo">` : ''}
+          <div class="header"><span class="white">A</span> KANTOR WILAYAH KEMENTRIAN HUKUM</div>
+          <div class="sub-header">KEPULAUAN RIAU</div>
           
-          <div class="label">Antrian No :</div>
+          <div class="label">Nomor Antrean</div>
           <div class="nomor-antrian">${nomorAntrian}</div>
           
-          <div class="locket">Locket : ${loketId}</div>
+          <div class="locket">Loket : ${loketId}</div>
           
-          <div class="footer">Mohon menunggu panggilan Anda. Terima kasih.</div>
+         <div class="footer">
+          <div>Silakan menunggu hingga nomor dipanggil</div>
+          <div class="tanggal">${new Date().toLocaleDateString('id-ID', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          })}</div>
+        </div>
           
-          <div class="tanggal">${new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
         </div>
       </body>
     </html>
@@ -67,45 +92,29 @@ const triggerPrint = async (loketId, nomorAntrian) => {
   const pdfPath = path.join(__dirname, 'temp_struk.pdf');
 
   try {
-    console.log('Membuat PDF...');
     const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox'] });
     const page = await browser.newPage();
 
     await page.setContent(htmlContent, { waitUntil: 'networkidle0' });
 
-    // =================================================================
-    // KUNCI UTAMA PERBAIKAN ADA DI SINI
-    // =================================================================
-    // 1. Ukur tinggi konten secara dinamis dari dalam browser
-    const contentHeight = await page.evaluate(() => {
-      // Menggunakan scrollHeight untuk mendapatkan tinggi total dari konten
-      return document.body.scrollHeight;
-    });
-
-    console.log(`Tinggi konten terukur: ${contentHeight}px`);
-    // =================================================================
-
-    // 2. Membuat PDF dengan tinggi yang presisi sesuai hasil pengukuran
     await page.pdf({
       path: pdfPath,
       width: '80mm',
-      height: `280px`, // Gunakan tinggi dinamis yang sudah diukur
+      height: `254.2px`,
       printBackground: true,
       margin: { top: 0, bottom: 0, left: 0, right: 0 },
     });
 
     await browser.close();
-    console.log(`PDF berhasil dibuat dengan tinggi presisi: ${pdfPath}`);
 
     const options = {
-      printer: 'POS-80',
+      printer: process.env.PRINTER_NAME,
     };
 
-    console.log(`Mengirim ke printer: ${options.printer}...`);
     await print(pdfPath, options);
     console.log('✅ Berhasil mengirim tugas cetak ke printer.');
   } catch (error) {
-    console.error('❌ Error saat proses cetak:', error);
+    throw new Error(`Gagal mencetak struk, Silahkan hubungin administrator.`);
   } finally {
     if (fs.existsSync(pdfPath)) {
       fs.unlinkSync(pdfPath);
@@ -123,16 +132,12 @@ const io = socketIo(server, {
   },
 });
 io.on('connection', (socket) => {
-  console.log('User connected:', socket.id);
-
   socket.on('joinLoket', (loket) => {
     socket.join(`loket-${loket}`);
-    console.log(`Socket ${socket.id} joined room loket-${loket}`);
   });
 
   socket.on('joinTV', () => {
     socket.join('tv-display');
-    console.log(`Socket ${socket.id} joined TV display room`);
   });
 
   // Event baru untuk memanggil antrean berikutnya dari loket
@@ -153,10 +158,9 @@ io.on('connection', (socket) => {
         // Kirim update ke semua yang mendengarkan 'antrianDipanggil' (terutama TV)
         // Kirim loketId dalam format 'loket1' untuk konsistensi di frontend
         io.to('tv-display').emit('antrianDipanggil', {
-          loketId: `loket${loketNum}`, // Kirim dalam format 'loket1'
+          loketId: `loket${loketNum}`,
           nomorAntrian: currentQueueNumber,
           locketData: {
-            // Kirim data locket lengkap untuk pembaruan di TV
             locket: loketNum,
             currentQueue: queue.currentQueue,
             lastTakenNumber: queue.lastTakenNumber,
@@ -173,11 +177,7 @@ io.on('connection', (socket) => {
           totalQueue: queue.totalQueue,
           nextQueue: queue.nextQueue,
         });
-
-        console.log(`Loket ${loketId} called number ${currentQueueNumber}`);
       } else {
-        console.log(`No more queues or locket not found for loketId: ${loketId}`);
-        // Optionally, emit an error or info back to the calling loket
         io.to(`loket-${loketNum}`).emit('noMoreQueue', { loketId: `loket${loketNum}`, message: 'Tidak ada antrian lagi.' });
       }
     } catch (error) {
@@ -202,8 +202,7 @@ io.on('connection', (socket) => {
         queue.totalQueue++;
 
         await queue.save();
-
-        // await triggerPrint(loketNum, newQueueNumber);
+        await triggerPrint(loketNum, newQueueNumber);
 
         // Kirim nomor antrean yang baru diambil kembali ke klien yang meminta
         socket.emit('queueNumberAssigned', {
@@ -216,10 +215,7 @@ io.on('connection', (socket) => {
           locket: loketNum,
           totalQueue: newQueueNumber,
         });
-
-        console.log(`Antrean baru ${newQueueNumber} diberikan untuk Loket ${loketNum}`);
       } else {
-        console.log(`Locket ${loketNum} not found.`);
         socket.emit('queueAssignmentError', {
           message: `Locket ${loketNum} tidak ditemukan.`,
         });
@@ -229,6 +225,18 @@ io.on('connection', (socket) => {
       socket.emit('queueAssignmentError', {
         message: 'Terjadi kesalahan saat mengambil nomor antrean.',
       });
+    }
+  });
+
+  // Event mencetak nomer antrian ulang tanpa menambahkan nomer antrian
+  socket.on('reprintTicket', async ({ locketId, nomorAntrian }) => {
+    try {
+      console.log(`Mencoba mencetak ulang tiket: Loket ${locketId}, Nomor ${nomorAntrian}`);
+      await triggerPrint(locketId, nomorAntrian);
+      socket.emit('reprintSuccess', { message: 'Struk berhasil dicetak ulang.' });
+    } catch (error) {
+      console.error('Gagal saat cetak ulang:', error.message);
+      socket.emit('reprintError', { message: error.message });
     }
   });
 
@@ -320,35 +328,30 @@ app.post(
         return res.status(400).json({ error: 'Tidak ada file yang diunggah atau format tidak valid (hanya mp4, mov, avi).' });
       }
 
-      let video = await VideoData.findOne(); //
-      const fileBaru = req.file.filename; //
-      let fileLama = null; //
+      let video = await VideoData.findOne();
+      const fileBaru = req.file.filename;
+      let fileLama = null;
 
-      console.log('DEBUG: Final filename string to be saved to DB:', fileBaru); // Tambahkan ini
-
-      const publicBaseUrl = process.env.BASE_URL; //
+      const publicBaseUrl = process.env.BASE_URL;
 
       if (!video) {
-        video = new VideoData({ filename: `${publicBaseUrl}/assets/${fileBaru}` }); //
+        video = new VideoData({ filename: `${publicBaseUrl}/assets/${fileBaru}` });
       } else {
-        fileLama = video.filename; //
-        video.filename = `${publicBaseUrl}/assets/${fileBaru}`; //
+        fileLama = video.filename;
+        video.filename = `${publicBaseUrl}/assets/${fileBaru}`;
       }
 
-      const savedVideo = await video.save(); //
+      const savedVideo = await video.save();
 
       // Hapus file lama jika ada
       if (fileLama) {
-        //
-        const parsedUrl = new URL(fileLama); //
-        const filenameToDelete = path.basename(parsedUrl.pathname); //
+        const parsedUrl = new URL(fileLama);
+        const filenameToDelete = path.basename(parsedUrl.pathname);
 
-        const oldPath = path.join(__dirname, 'public', 'assets', filenameToDelete); //
+        const oldPath = path.join(__dirname, 'public', 'assets', filenameToDelete);
 
         if (fs.existsSync(oldPath)) {
-          //
           fs.unlinkSync(oldPath); //
-          console.log(`File lama dihapus: ${filenameToDelete} dari ${oldPath}`); //
         } else {
           console.log(`File lama tidak ditemukan di path: ${oldPath}`); //
         }
@@ -359,7 +362,7 @@ app.post(
         filename: savedVideo.filename, //
       });
     } catch (error) {
-      console.error('Server error during video upload process:', error); // Log error lebih spesifik
+      console.error('Server error during video upload process:', error);
       return res.status(500).json({ error: 'Ada kesalahan pada server saat proses upload video, silahkan coba lagi' });
     }
   }
@@ -374,6 +377,5 @@ app.use('*', (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', async () => {
-  // 1. Tambahkan async di sini
   console.log(`You are Running in PORT ${PORT}`);
 });
