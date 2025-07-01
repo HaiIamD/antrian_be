@@ -58,6 +58,9 @@ const triggerPrint = async (loketId, nomorAntrian) => {
             margin-button: 10px;
 
           }
+          .pojok {  position: absolute;
+  left: 0;
+  top: 0;}
           .locket { font-size: 13px; margin-bottom: 5px;}
           .footer { font-size: 12px; }
           .tanggal { font-size: 12px; margin-top: 5px; }
@@ -66,7 +69,8 @@ const triggerPrint = async (loketId, nomorAntrian) => {
       <body>
         <div class="container">
         ${logoDataUri ? `<img src="${logoDataUri}" alt="Logo" class="logo">` : ''}
-          <div class="header"><span class="white">A</span> KANTOR WILAYAH KEMENTRIAN HUKUM</div>
+          <div class="pojok">|</div>
+          <div class="header">KANTOR WILAYAH KEMENTERIAN HUKUM</div>
           <div class="sub-header">KEPULAUAN RIAU</div>
           
           <div class="label">Nomor Antrean</div>
@@ -75,7 +79,7 @@ const triggerPrint = async (loketId, nomorAntrian) => {
           <div class="locket">Loket : ${loketId}</div>
           
          <div class="footer">
-          <div>Silakan menunggu hingga nomor dipanggil</div>
+          <div>Silakan menunggu hingga nomor Anda dipanggil</div>
           <div class="tanggal">${new Date().toLocaleDateString('id-ID', {
             weekday: 'long',
             year: 'numeric',
